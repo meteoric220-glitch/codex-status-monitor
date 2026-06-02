@@ -1,6 +1,6 @@
 # Codex Status Monitor
 
-A small open-source macOS utility that shows the current Codex project status in a top-right floating capsule.
+A small open-source macOS utility that shows the current Codex project status inside a DynamicNotchKit-style notch monitor.
 
 The monitor uses the Codex logo itself as the status light:
 
@@ -9,7 +9,7 @@ The monitor uses the Codex logo itself as the status light:
 - Blue gradient logo: `Working`
 - Gray logo: `Setup` or `Error`
 
-The capsule stays compact by default. When the status changes, it expands for 5 seconds to show a short English label, then returns to the compact logo-only view.
+The monitor stays compact by default. When the status changes, it shows a short English label for 5 seconds, then returns to the compact logo-only view.
 
 ## Requirements
 
@@ -18,6 +18,10 @@ The capsule stays compact by default. When the status changes, it expands for 5 
 - Codex Desktop with local state in `~/.codex`
 
 The app is not App Store sandboxed because it needs to read local Codex state files.
+
+## Notch Design
+
+The window follows DynamicNotchKit's compact trailing layout: a transparent top panel draws a solid black notch shape, keeps the hardware notch space in the center, and places the Codex logo and temporary status text on the trailing side. Only the logo itself receives mouse events; the text, notch background, and transparent panel do not block clicks behind them.
 
 ## Run
 

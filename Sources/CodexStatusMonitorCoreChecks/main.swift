@@ -49,6 +49,17 @@ struct CheckRunner {
 
         expect(
             classifier.classify(events: [
+                .taskStarted(turnID: "old", timestamp: baseDate),
+                .functionCall(name: "request_user_input", callID: "call-old", arguments: "{}", timestamp: baseDate.addingTimeInterval(1)),
+                .taskStarted(turnID: "new", timestamp: baseDate.addingTimeInterval(10)),
+                .taskComplete(turnID: "new", timestamp: baseDate.addingTimeInterval(11)),
+                .assistantMessage(text: "已完成，可以运行打包后的 app。", phase: "final_answer", timestamp: baseDate.addingTimeInterval(12))
+            ]) == .done,
+            "Historical unresolved request_user_input should not affect the latest completed turn"
+        )
+
+        expect(
+            classifier.classify(events: [
                 .taskStarted(turnID: "turn", timestamp: baseDate),
                 .functionCall(name: "request_user_input", callID: "call-1", arguments: "{}", timestamp: baseDate.addingTimeInterval(1)),
                 .functionCallOutput(callID: "call-1", timestamp: baseDate.addingTimeInterval(2)),
@@ -93,6 +104,25 @@ struct CheckRunner {
                 .assistantMessage(text: "这个问题为什么会发生？", phase: "final_answer", timestamp: baseDate.addingTimeInterval(2))
             ]) == .done,
             "Explanatory final question should be done"
+        )
+
+        expect(
+            classifier.classify(events: [
+                .taskStarted(turnID: "turn", timestamp: baseDate),
+                .taskComplete(turnID: "turn", timestamp: baseDate.addingTimeInterval(1)),
+                .assistantMessage(text: "我会继续检查，请等待。", phase: "commentary", timestamp: baseDate.addingTimeInterval(2)),
+                .assistantMessage(text: "已完成，可以运行。", phase: "final_answer", timestamp: baseDate.addingTimeInterval(3))
+            ]) == .done,
+            "Commentary messages should not trigger final waiting detection"
+        )
+
+        expect(
+            classifier.classify(events: [
+                .taskStarted(turnID: "turn", timestamp: baseDate),
+                .taskComplete(turnID: "turn", timestamp: baseDate.addingTimeInterval(1)),
+                .assistantMessage(text: "请确认是否继续？", phase: "final_answer", timestamp: baseDate.addingTimeInterval(2))
+            ]) == .waiting,
+            "Final confirmation question should be waiting"
         )
     }
 

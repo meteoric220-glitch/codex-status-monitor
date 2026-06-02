@@ -8,6 +8,8 @@ public final class StateClassifier {
     }
 
     public func classify(events: [SessionEvent]) -> MonitorStatus {
+        let events = latestTurnEvents(from: events)
+
         guard !events.isEmpty else {
             return .done
         }
@@ -26,6 +28,19 @@ public final class StateClassifier {
         }
 
         return .done
+    }
+
+    private func latestTurnEvents(from events: [SessionEvent]) -> [SessionEvent] {
+        guard let latestTaskStartedIndex = events.lastIndex(where: { event in
+            if case .taskStarted = event {
+                return true
+            }
+            return false
+        }) else {
+            return events
+        }
+
+        return Array(events[latestTaskStartedIndex...])
     }
 
     private func hasUnresolvedRequestUserInput(_ events: [SessionEvent]) -> Bool {
@@ -115,7 +130,7 @@ public final class StateClassifier {
             guard case let .assistantMessage(text, phase, _) = event else {
                 return nil
             }
-            if phase == nil || phase == "final_answer" || phase == "commentary" {
+            if phase == nil || phase == "final_answer" {
                 return text
             }
             return nil
