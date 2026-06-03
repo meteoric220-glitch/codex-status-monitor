@@ -8,25 +8,31 @@ public final class ClaudeSessionResolver: ClaudeSessionResolving {
     private let projectsDirectory: URL
     private let parser: ClaudeSessionEventParser
     private let fileManager: FileManager
+    private let maxTranscriptCandidates: Int
+    private var cache: [String: CacheEntry] = [:]
 
     public init(
         paths: ClaudePaths = ClaudePaths(),
         parser: ClaudeSessionEventParser = ClaudeSessionEventParser(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        maxTranscriptCandidates: Int = 100
     ) {
         self.projectsDirectory = paths.projectsDirectory
         self.parser = parser
         self.fileManager = fileManager
+        self.maxTranscriptCandidates = maxTranscriptCandidates
     }
 
     public init(
         projectsDirectory: URL,
         parser: ClaudeSessionEventParser = ClaudeSessionEventParser(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        maxTranscriptCandidates: Int = 100
     ) {
         self.projectsDirectory = projectsDirectory
         self.parser = parser
         self.fileManager = fileManager
+        self.maxTranscriptCandidates = maxTranscriptCandidates
     }
 
     public func resolveSession(for projectDirectory: URL) throws -> ClaudeSession? {
@@ -35,21 +41,28 @@ public final class ClaudeSessionResolver: ClaudeSessionResolving {
         }
 
         let normalizedProjectPath = projectDirectory.standardizedFileURL.path
-        let transcriptURLs = try transcriptURLs(in: projectsDirectory)
+        let transcriptFiles = try transcriptFiles(in: projectsDirectory)
+        let signature = DirectorySignature(files: transcriptFiles)
+
+        if let cached = cache[normalizedProjectPath],
+           cached.signature == signature {
+            return cached.session
+        }
+
+        let candidateFiles = transcriptFiles.prefix(maxTranscriptCandidates)
         var bestSession: ClaudeSession?
 
-        for transcriptURL in transcriptURLs {
-            guard let metadata = try parser.metadata(from: transcriptURL),
+        for transcriptFile in candidateFiles {
+            guard let metadata = try parser.metadata(from: transcriptFile.url),
                   metadata.cwd.path == normalizedProjectPath
             else {
                 continue
             }
 
-            let fallbackUpdatedAt = fileModificationDate(for: transcriptURL) ?? metadata.updatedAt
-            let updatedAt = max(metadata.updatedAt, fallbackUpdatedAt)
+            let updatedAt = max(metadata.updatedAt, transcriptFile.modifiedAt)
             let session = ClaudeSession(
                 id: metadata.sessionID,
-                transcriptPath: transcriptURL,
+                transcriptPath: transcriptFile.url,
                 cwd: metadata.cwd,
                 updatedAt: updatedAt
             )
@@ -60,19 +73,20 @@ public final class ClaudeSessionResolver: ClaudeSessionResolving {
             bestSession = session
         }
 
+        cache[normalizedProjectPath] = CacheEntry(signature: signature, session: bestSession)
         return bestSession
     }
 
-    private func transcriptURLs(in directory: URL) throws -> [URL] {
+    private func transcriptFiles(in directory: URL) throws -> [TranscriptFile] {
         guard let enumerator = fileManager.enumerator(
             at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
         }
 
-        var urls: [URL] = []
+        var files: [TranscriptFile] = []
         for case let url as URL in enumerator {
             if url.pathComponents.contains("subagents") {
                 enumerator.skipDescendants()
@@ -83,15 +97,39 @@ public final class ClaudeSessionResolver: ClaudeSessionResolving {
                 continue
             }
 
-            let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey])
+            let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
             if resourceValues?.isRegularFile == true {
-                urls.append(url)
+                files.append(TranscriptFile(
+                    url: url,
+                    modifiedAt: resourceValues?.contentModificationDate ?? .distantPast
+                ))
             }
         }
-        return urls
+        return files.sorted { lhs, rhs in
+            if lhs.modifiedAt == rhs.modifiedAt {
+                return lhs.url.path < rhs.url.path
+            }
+            return lhs.modifiedAt > rhs.modifiedAt
+        }
     }
+}
 
-    private func fileModificationDate(for url: URL) -> Date? {
-        (try? fileManager.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date
+private struct TranscriptFile {
+    let url: URL
+    let modifiedAt: Date
+}
+
+private struct DirectorySignature: Equatable {
+    let count: Int
+    let newestModifiedAt: Date?
+
+    init(files: [TranscriptFile]) {
+        self.count = files.count
+        self.newestModifiedAt = files.first?.modifiedAt
     }
+}
+
+private struct CacheEntry {
+    let signature: DirectorySignature
+    let session: ClaudeSession?
 }

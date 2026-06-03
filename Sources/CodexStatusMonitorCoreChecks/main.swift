@@ -289,6 +289,72 @@ struct CheckRunner {
         }
     }
 
+    mutating func runClaudeResolverCandidateLimitChecks() {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("CodexStatusMonitorCandidateLimitChecks-\(UUID().uuidString)", isDirectory: true)
+        let projectsDirectory = root.appendingPathComponent("projects", isDirectory: true)
+        let projectDirectory = root.appendingPathComponent("target project", isDirectory: true)
+        let encodedDirectory = projectsDirectory.appendingPathComponent("-tmp-target-project", isDirectory: true)
+
+        do {
+            try fileManager.createDirectory(at: encodedDirectory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+            defer {
+                try? fileManager.removeItem(at: root)
+            }
+
+            let newestSession = encodedDirectory.appendingPathComponent("newest.jsonl")
+            let middleSession = encodedDirectory.appendingPathComponent("middle.jsonl")
+            let oldestSession = encodedDirectory.appendingPathComponent("oldest.jsonl")
+
+            try writeTranscript(
+                to: newestSession,
+                sessionID: "newest",
+                cwd: "/tmp/other",
+                timestamp: "2026-06-02T14:23:50.000Z",
+                entrypoint: "cli"
+            )
+            try writeTranscript(
+                to: middleSession,
+                sessionID: "middle",
+                cwd: projectDirectory.path,
+                timestamp: "2026-06-02T14:23:40.000Z",
+                entrypoint: "cli"
+            )
+            try writeTranscript(
+                to: oldestSession,
+                sessionID: "oldest",
+                cwd: projectDirectory.path,
+                timestamp: "2026-06-02T14:23:30.000Z",
+                entrypoint: "cli"
+            )
+
+            try fileManager.setAttributes([.modificationDate: Date(timeIntervalSince1970: 3_000)], ofItemAtPath: newestSession.path)
+            try fileManager.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: middleSession.path)
+            try fileManager.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000)], ofItemAtPath: oldestSession.path)
+
+            let resolver = ClaudeSessionResolver(projectsDirectory: projectsDirectory, maxTranscriptCandidates: 2)
+            let session = try resolver.resolveSession(for: projectDirectory)
+            expect(session?.id == "middle", "Claude resolver should only parse recent transcript candidates")
+        } catch {
+            expect(false, "Claude resolver candidate limit checks should not throw: \(error)")
+        }
+    }
+
+    mutating func runClaudeStatusServiceFallbackChecks() {
+        let projectDirectory = URL(fileURLWithPath: "/tmp/claude-desktop-project")
+        let service = ClaudeStatusService(
+            resolver: StubClaudeResolver(session: nil),
+            parser: ClaudeSessionEventParser(),
+            classifier: StateClassifier()
+        )
+
+        let noDataSnapshot = service.snapshot(for: projectDirectory)
+        expect(noDataSnapshot.status == .error, "Claude status service should use error status when no JSONL data exists")
+        expect(noDataSnapshot.detail == "No Data Yet", "Claude status service should show No Data Yet without JSONL data")
+    }
+
     private func writeTranscript(
         to url: URL,
         sessionID: String,
@@ -323,4 +389,18 @@ runner.runStateClassifierChecks()
 runner.runParserChecks()
 runner.runClaudeParserChecks()
 runner.runClaudeResolverChecks()
+runner.runClaudeResolverCandidateLimitChecks()
+runner.runClaudeStatusServiceFallbackChecks()
 runner.finish()
+
+private final class StubClaudeResolver: ClaudeSessionResolving {
+    let session: ClaudeSession?
+
+    init(session: ClaudeSession?) {
+        self.session = session
+    }
+
+    func resolveSession(for projectDirectory: URL) throws -> ClaudeSession? {
+        session
+    }
+}

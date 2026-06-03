@@ -26,7 +26,7 @@ public final class ClaudeStatusService: CodexStatusServicing {
             guard let session = try resolver.resolveSession(for: projectDirectory) else {
                 return MonitorSnapshot(
                     status: .error,
-                    detail: "No Session",
+                    detail: "No Data Yet",
                     projectName: projectName
                 )
             }

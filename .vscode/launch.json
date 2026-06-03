@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:codex-status-monitor}",
+            "name": "Debug CodexStatusMonitor",
+            "target": "CodexStatusMonitor",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug CodexStatusMonitor"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:codex-status-monitor}",
+            "name": "Release CodexStatusMonitor",
+            "target": "CodexStatusMonitor",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release CodexStatusMonitor"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:codex-status-monitor}",
+            "name": "Debug CodexStatusMonitorCoreChecks",
+            "target": "CodexStatusMonitorCoreChecks",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug CodexStatusMonitorCoreChecks"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:codex-status-monitor}",
+            "name": "Release CodexStatusMonitorCoreChecks",
+            "target": "CodexStatusMonitorCoreChecks",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release CodexStatusMonitorCoreChecks"
+        }
+    ]
+}

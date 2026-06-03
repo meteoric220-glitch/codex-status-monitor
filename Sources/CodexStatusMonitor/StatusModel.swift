@@ -25,14 +25,12 @@ final class StatusModel: ObservableObject {
 
     func start() {
         refresh(expandOnChange: false)
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refresh()
-            }
-        }
     }
 
     func refresh(expandOnChange: Bool = true) {
+        timer?.invalidate()
+        timer = nil
+
         provider = store.selectedProvider
         let nextSnapshot = service.snapshot(for: store.selectedProjectDirectory)
         let statusChanged = nextSnapshot.status != lastStatus
@@ -44,6 +42,8 @@ final class StatusModel: ObservableObject {
                 expandTemporarily()
             }
         }
+
+        scheduleNextRefresh()
     }
 
     func selectProvider(_ provider: ProviderKind) {
@@ -73,6 +73,26 @@ final class StatusModel: ObservableObject {
                     self.isExpanded = false
                 }
             }
+        }
+    }
+
+    private func scheduleNextRefresh() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: refreshInterval(for: snapshot.status), repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.refresh()
+            }
+        }
+    }
+
+    private func refreshInterval(for status: MonitorStatus) -> TimeInterval {
+        switch status {
+        case .working, .waiting:
+            return 2
+        case .done:
+            return 5
+        case .setup, .error:
+            return 10
         }
     }
 }

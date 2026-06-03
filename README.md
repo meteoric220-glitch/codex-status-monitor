@@ -9,6 +9,14 @@ The monitor uses the selected provider mark itself as the status light:
 - Blue gradient logo: `Working`
 - Gray logo: `Setup` or `Error`
 
+Gray means the monitor does not currently have a usable live status:
+
+- `Setup` / `Choose Project`: no project folder has been selected yet.
+- `Error` / `No Thread`: Codex has no matching local thread for the selected project.
+- `Error` / `No Data Yet`: Claude has no matching Claude Code JSONL session for the selected project. This is expected for Claude Desktop or Claude Web.
+- `Error` / `Missing Session`: a matching session record exists, but the referenced session file is missing.
+- `Error` / `Error`: the local state file could not be read or parsed.
+
 The monitor stays compact by default. When the status changes, it shows a short English label for 5 seconds, then returns to the compact logo-only view.
 
 Provider icons are bundled from [Lobe Icons](https://github.com/lobehub/lobe-icons) under the MIT license. The app includes the Lobe Icons license text in its resources; Codex and Claude trademarks remain owned by their respective owners.
@@ -67,7 +75,11 @@ The app bundle will be written to `Packaging/Codex Status Monitor.app`.
 
 Codex mode reads `~/.codex/state_5.sqlite`, matches the selected project directory against `threads.cwd`, then uses `threads.rollout_path` to read the session JSONL file.
 
-Claude mode reads `~/.claude/projects/*/*.jsonl`, matches the selected project directory against each transcript line's `cwd`, and picks the newest matching main session. This supports both Terminal CLI sessions and VS Code Claude Code sessions. Codex and Claude provider marks are loaded from bundled Lobe Icons resources, so CLI-only users do not need the desktop apps installed for the icon display.
+Claude mode reads `~/.claude/projects/*/*.jsonl`, matches the selected project directory against each transcript line's `cwd`, and picks the newest matching main session. This supports Terminal CLI sessions and VS Code Claude Code sessions.
+
+Claude Desktop and Claude Web are not supported status sources. They do not expose a stable local transcript with project `cwd` and turn/tool state. Their Electron or browser caches can contain historical UI strings such as `thinking`, `message.sent`, or tool names, but those strings are not reliable indicators of the current conversation state, and scanning them can make the monitor slow. When Claude mode cannot find a matching Claude Code JSONL session, the monitor shows `No Data Yet`.
+
+Codex and Claude provider marks are loaded from bundled Lobe Icons resources, so CLI-only users do not need the desktop apps installed for the icon display.
 
 Status priority:
 
