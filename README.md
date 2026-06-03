@@ -1,8 +1,8 @@
 # Codex Status Monitor
 
-A small open-source macOS utility that shows the current Codex project status inside a DynamicNotchKit-style notch monitor.
+A small open-source macOS utility that shows the current Codex or Claude project status inside a DynamicNotchKit-style notch monitor.
 
-The monitor uses the Codex logo itself as the status light:
+The monitor uses the selected provider mark itself as the status light:
 
 - Green logo: `Done`
 - Yellow blinking logo: `Waiting`
@@ -11,17 +11,27 @@ The monitor uses the Codex logo itself as the status light:
 
 The monitor stays compact by default. When the status changes, it shows a short English label for 5 seconds, then returns to the compact logo-only view.
 
+Provider icons are bundled from [Lobe Icons](https://github.com/lobehub/lobe-icons) under the MIT license. The app includes the Lobe Icons license text in its resources; Codex and Claude trademarks remain owned by their respective owners.
+
+## Icon Attribution
+
+The bundled provider icons come from Lobe Icons:
+
+- Codex: [`packages/static-png/light/codex.png`](https://github.com/lobehub/lobe-icons/blob/master/packages/static-png/light/codex.png)
+- Claude: [`packages/static-png/light/claude.png`](https://github.com/lobehub/lobe-icons/blob/master/packages/static-png/light/claude.png)
+- License: [`MIT`](https://github.com/lobehub/lobe-icons/blob/master/LICENSE), copied into the app bundle as `LobeIcons-LICENSE.txt`
+
 ## Requirements
 
 - macOS 14 or newer
 - Swift 6 toolchain
-- Codex Desktop with local state in `~/.codex`
+- Codex Desktop with local state in `~/.codex`, or Claude CLI / Claude Code with local state in `~/.claude`
 
-The app is not App Store sandboxed because it needs to read local Codex state files.
+The app is not App Store sandboxed because it needs to read local Codex or Claude state files.
 
 ## Notch Design
 
-The window follows DynamicNotchKit's compact trailing layout: a transparent top panel draws a solid black notch shape, keeps the hardware notch space in the center, and places the Codex logo and temporary status text on the trailing side. Only the logo itself receives mouse events; the text, notch background, and transparent panel do not block clicks behind them.
+The window follows DynamicNotchKit's compact trailing layout: a transparent top panel draws a solid black notch shape, keeps the hardware notch space in the center, and places the provider status mark and temporary status text on the trailing side. Only the mark itself receives mouse events; the text, notch background, and transparent panel do not block clicks behind them.
 
 ## Run
 
@@ -29,7 +39,7 @@ The window follows DynamicNotchKit's compact trailing layout: a transparent top 
 swift run --scratch-path .build CodexStatusMonitor
 ```
 
-On first launch, choose the project folder you want to monitor. The choice is saved locally and can be changed from the capsule context menu.
+On first launch, choose the project folder you want to monitor. The choice is saved locally and can be changed from the context menu. The same menu also switches the active provider between Codex and Claude.
 
 ## Build
 
@@ -55,7 +65,9 @@ The app bundle will be written to `Packaging/Codex Status Monitor.app`.
 
 ## How Status Is Detected
 
-The app reads `~/.codex/state_5.sqlite`, matches the selected project directory against `threads.cwd`, then uses `threads.rollout_path` to read the session JSONL file.
+Codex mode reads `~/.codex/state_5.sqlite`, matches the selected project directory against `threads.cwd`, then uses `threads.rollout_path` to read the session JSONL file.
+
+Claude mode reads `~/.claude/projects/*/*.jsonl`, matches the selected project directory against each transcript line's `cwd`, and picks the newest matching main session. This supports both Terminal CLI sessions and VS Code Claude Code sessions. Codex and Claude provider marks are loaded from bundled Lobe Icons resources, so CLI-only users do not need the desktop apps installed for the icon display.
 
 Status priority:
 

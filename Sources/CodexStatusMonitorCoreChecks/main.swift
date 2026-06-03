@@ -16,16 +16,26 @@ struct CheckRunner {
     mutating func runWaitingSignalChecks() {
         let detector = WaitingSignalDetector()
 
-        expect(detector.requiresUserResponse("Please confirm this design."), "English confirm keyword")
+        expect(detector.requiresUserResponse("Please confirm this design."), "English confirm request")
         expect(detector.requiresUserResponse("Which option should I use?"), "English choice question")
         expect(detector.requiresUserResponse("Let me know what you choose."), "English let-me-know keyword")
-        expect(detector.requiresUserResponse("请确认这个方案是否符合你的想法？"), "Chinese confirm keyword")
+        expect(detector.requiresUserResponse("请确认这个方案是否符合你的想法？"), "Chinese confirm request")
         expect(detector.requiresUserResponse("你要不要继续？"), "Chinese continue question")
-        expect(detector.requiresUserResponse("请选择 A 还是 B？"), "Chinese choose keyword")
+        expect(detector.requiresUserResponse("请选择 A 还是 B？"), "Chinese choose request")
 
         expect(!detector.requiresUserResponse("这个问题为什么会发生？"), "Chinese explanatory question should be done")
         expect(!detector.requiresUserResponse("这意味着什么？"), "Chinese meaning question should be done")
         expect(!detector.requiresUserResponse("Why did this happen?"), "English explanatory question should be done")
+        expect(!detector.requiresUserResponse("已确认：三项检查通过。"), "Completed confirmation summary should be done")
+        expect(!detector.requiresUserResponse("已验证两个文件语法通过。"), "Completed verification summary should be done")
+        expect(
+            !detector.requiresUserResponse("右键菜单新增 Provider > Codex / Claude，选择会持久化。"),
+            "Persistent selection summary should be done"
+        )
+        expect(
+            !detector.requiresUserResponse("Claude JSONL 映射到现有状态逻辑，复用 Working / Waiting / Done 分类。"),
+            "Status taxonomy summary should be done"
+        )
 
         let optionText = """
         Option A keeps the compact capsule.
@@ -124,6 +134,41 @@ struct CheckRunner {
             ]) == .waiting,
             "Final confirmation question should be waiting"
         )
+
+        expect(
+            classifier.classify(events: [
+                .taskStarted(turnID: "turn", timestamp: baseDate),
+                .taskComplete(turnID: "turn", timestamp: baseDate.addingTimeInterval(1)),
+                .assistantMessage(text: "已确认：三项检查通过。", phase: "final_answer", timestamp: baseDate.addingTimeInterval(2))
+            ]) == .done,
+            "Completed confirmation summary should be done"
+        )
+
+        expect(
+            classifier.classify(events: [
+                .taskStarted(turnID: "turn", timestamp: baseDate),
+                .taskComplete(turnID: "turn", timestamp: baseDate.addingTimeInterval(1)),
+                .assistantMessage(
+                    text: "右键菜单新增 Provider > Codex / Claude，选择会持久化。默认仍是 Codex。",
+                    phase: "final_answer",
+                    timestamp: baseDate.addingTimeInterval(2)
+                )
+            ]) == .done,
+            "Persistent selection final summary should be done"
+        )
+
+        expect(
+            classifier.classify(events: [
+                .taskStarted(turnID: "turn", timestamp: baseDate),
+                .taskComplete(turnID: "turn", timestamp: baseDate.addingTimeInterval(1)),
+                .assistantMessage(
+                    text: "Claude JSONL 映射到现有状态逻辑，复用 Working / Waiting / Done 分类。",
+                    phase: "final_answer",
+                    timestamp: baseDate.addingTimeInterval(2)
+                )
+            ]) == .done,
+            "Status taxonomy final summary should be done"
+        )
     }
 
     mutating func runParserChecks() {
@@ -147,6 +192,121 @@ struct CheckRunner {
         expect(parser.parseLine("{not-json") == nil, "Parser should ignore malformed lines")
     }
 
+    mutating func runClaudeParserChecks() {
+        let parser = ClaudeSessionEventParser()
+        let classifier = StateClassifier()
+
+        let cliUserLine = #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"build it"}]},"uuid":"user-1","promptId":"prompt-1","timestamp":"2026-06-02T14:23:40.000Z","entrypoint":"cli","cwd":"/tmp/claude-project","sessionId":"session-cli"}"#
+        let toolUseLine = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"Bash","input":{"command":"npm test"}}],"stop_reason":"tool_use"},"uuid":"assistant-1","timestamp":"2026-06-02T14:23:41.000Z","entrypoint":"cli","cwd":"/tmp/claude-project","sessionId":"session-cli"}"#
+        let toolResultLine = #"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"call_1","type":"tool_result","content":"ok","is_error":false}]},"uuid":"result-1","timestamp":"2026-06-02T14:23:42.000Z","entrypoint":"cli","cwd":"/tmp/claude-project","sessionId":"session-cli"}"#
+        let doneLine = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"已完成，可以运行。"}],"stop_reason":"end_turn"},"uuid":"assistant-2","timestamp":"2026-06-02T14:23:43.000Z","entrypoint":"cli","cwd":"/tmp/claude-project","sessionId":"session-cli"}"#
+        let waitingLine = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"请确认是否继续？"}],"stop_reason":"end_turn"},"uuid":"assistant-3","timestamp":"2026-06-02T14:23:44.000Z","entrypoint":"claude-vscode","cwd":"/tmp/claude-project","sessionId":"session-vscode"}"#
+
+        let workingEvents = [cliUserLine, toolUseLine].compactMap(parser.parseLine)
+        expect(classifier.classify(events: workingEvents) == .working, "Claude unresolved tool_use should be working")
+
+        let doneEvents = [cliUserLine, toolUseLine, toolResultLine, doneLine].compactMap(parser.parseLine)
+        expect(classifier.classify(events: doneEvents) == .done, "Claude resolved tool_use with normal final answer should be done")
+
+        let waitingEvents = [cliUserLine, waitingLine].compactMap(parser.parseLine)
+        expect(classifier.classify(events: waitingEvents) == .waiting, "Claude final confirmation question should be waiting")
+
+        expect(
+            parser.parseLine(cliUserLine) == .taskStarted(
+                turnID: "prompt-1",
+                timestamp: Self.isoDate("2026-06-02T14:23:40.000Z")
+            ),
+            "Claude CLI user text should start a turn"
+        )
+    }
+
+    mutating func runClaudeResolverChecks() {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("CodexStatusMonitorCoreChecks-\(UUID().uuidString)", isDirectory: true)
+        let projectsDirectory = root.appendingPathComponent("projects", isDirectory: true)
+        let projectDirectory = root.appendingPathComponent("target project", isDirectory: true)
+        let otherProjectDirectory = root.appendingPathComponent("other project", isDirectory: true)
+
+        do {
+            try fileManager.createDirectory(at: projectsDirectory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: otherProjectDirectory, withIntermediateDirectories: true)
+            defer {
+                try? fileManager.removeItem(at: root)
+            }
+
+            let encodedDirectory = projectsDirectory.appendingPathComponent("-tmp-target-project", isDirectory: true)
+            let otherEncodedDirectory = projectsDirectory.appendingPathComponent("-tmp-other-project", isDirectory: true)
+            let subagentDirectory = encodedDirectory.appendingPathComponent("subagents", isDirectory: true)
+            try fileManager.createDirectory(at: encodedDirectory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: otherEncodedDirectory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: subagentDirectory, withIntermediateDirectories: true)
+
+            let oldSession = encodedDirectory.appendingPathComponent("old.jsonl")
+            let newSession = encodedDirectory.appendingPathComponent("new.jsonl")
+            let otherSession = otherEncodedDirectory.appendingPathComponent("other.jsonl")
+            let sidechainSession = subagentDirectory.appendingPathComponent("sidechain.jsonl")
+
+            try writeTranscript(
+                to: oldSession,
+                sessionID: "old",
+                cwd: projectDirectory.path,
+                timestamp: "2026-06-02T14:23:40.000Z",
+                entrypoint: "cli"
+            )
+            try writeTranscript(
+                to: newSession,
+                sessionID: "new",
+                cwd: projectDirectory.path,
+                timestamp: "2026-06-02T14:23:50.000Z",
+                entrypoint: "claude-vscode"
+            )
+            try writeTranscript(
+                to: otherSession,
+                sessionID: "other",
+                cwd: otherProjectDirectory.path,
+                timestamp: "2026-06-02T14:24:00.000Z",
+                entrypoint: "cli"
+            )
+            try writeTranscript(
+                to: sidechainSession,
+                sessionID: "sidechain",
+                cwd: projectDirectory.path,
+                timestamp: "2026-06-02T14:25:00.000Z",
+                entrypoint: "cli"
+            )
+
+            let resolver = ClaudeSessionResolver(projectsDirectory: projectsDirectory)
+            let session = try resolver.resolveSession(for: projectDirectory)
+            expect(session?.id == "new", "Claude resolver should choose newest matching main session")
+            expect(
+                session?.transcriptPath.standardizedFileURL.path == newSession.standardizedFileURL.path,
+                "Claude resolver should return newest transcript path"
+            )
+        } catch {
+            expect(false, "Claude resolver checks should not throw: \(error)")
+        }
+    }
+
+    private func writeTranscript(
+        to url: URL,
+        sessionID: String,
+        cwd: String,
+        timestamp: String,
+        entrypoint: String
+    ) throws {
+        let escapedCWD = cwd.replacingOccurrences(of: #"\"#, with: #"\\"#)
+        let line = #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hello"}]},"uuid":"\#(sessionID)-user","promptId":"\#(sessionID)-prompt","timestamp":"\#(timestamp)","entrypoint":"\#(entrypoint)","cwd":"\#(escapedCWD)","sessionId":"\#(sessionID)"}"#
+        try line.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func isoDate(_ value: String) -> Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value)!
+    }
+
     func finish() -> Never {
         if failures == 0 {
             print("All CodexStatusMonitorCore checks passed.")
@@ -161,4 +321,6 @@ var runner = CheckRunner()
 runner.runWaitingSignalChecks()
 runner.runStateClassifierChecks()
 runner.runParserChecks()
+runner.runClaudeParserChecks()
+runner.runClaudeResolverChecks()
 runner.finish()

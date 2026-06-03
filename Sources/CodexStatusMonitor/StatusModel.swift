@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 final class StatusModel: ObservableObject {
     @Published private(set) var snapshot: MonitorSnapshot
+    @Published private(set) var provider: ProviderKind
     @Published var isExpanded = false
 
     private let store: ProjectSelectionStore
@@ -17,6 +18,7 @@ final class StatusModel: ObservableObject {
     init(store: ProjectSelectionStore, service: CodexStatusServicing) {
         self.store = store
         self.service = service
+        self.provider = store.selectedProvider
         self.snapshot = service.snapshot(for: store.selectedProjectDirectory)
         self.lastStatus = snapshot.status
     }
@@ -31,6 +33,7 @@ final class StatusModel: ObservableObject {
     }
 
     func refresh(expandOnChange: Bool = true) {
+        provider = store.selectedProvider
         let nextSnapshot = service.snapshot(for: store.selectedProjectDirectory)
         let statusChanged = nextSnapshot.status != lastStatus
         snapshot = nextSnapshot
@@ -41,6 +44,17 @@ final class StatusModel: ObservableObject {
                 expandTemporarily()
             }
         }
+    }
+
+    func selectProvider(_ provider: ProviderKind) {
+        guard store.selectedProvider != provider else {
+            return
+        }
+
+        store.selectedProvider = provider
+        self.provider = provider
+        lastStatus = nil
+        refresh()
     }
 
     func expandTemporarily() {

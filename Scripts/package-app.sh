@@ -8,13 +8,17 @@ CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
+rm -rf "$BUILD_DIR/release/CodexStatusMonitor_CodexStatusMonitor.bundle"
 swift build --scratch-path "$BUILD_DIR" --configuration release --product CodexStatusMonitor
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$BUILD_DIR/release/CodexStatusMonitor" "$MACOS_DIR/Codex Status Monitor"
-cp "$ROOT_DIR/Sources/CodexStatusMonitor/Resources/codexTemplate@2x.png" "$RESOURCES_DIR/codexTemplate@2x.png"
+cp -R "$BUILD_DIR/release/CodexStatusMonitor_CodexStatusMonitor.bundle" "$APP_DIR/CodexStatusMonitor_CodexStatusMonitor.bundle"
+cp "$ROOT_DIR/Sources/CodexStatusMonitor/Resources/lobe-codex.png" "$RESOURCES_DIR/lobe-codex.png"
+cp "$ROOT_DIR/Sources/CodexStatusMonitor/Resources/lobe-claude.png" "$RESOURCES_DIR/lobe-claude.png"
+cp "$ROOT_DIR/Sources/CodexStatusMonitor/Resources/LobeIcons-LICENSE.txt" "$RESOURCES_DIR/LobeIcons-LICENSE.txt"
 
 cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

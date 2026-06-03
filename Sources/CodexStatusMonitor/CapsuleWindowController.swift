@@ -176,6 +176,7 @@ private struct NotchContainerView: View {
 
                     HStack(spacing: NotchLayout.contentSpacing) {
                         LogoStatusView(status: model.snapshot.status)
+                            .provider(model.provider)
                             .frame(width: NotchLayout.logoSize, height: NotchLayout.logoSize)
 
                         if model.isExpanded {

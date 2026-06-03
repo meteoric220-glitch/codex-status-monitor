@@ -4,6 +4,7 @@ import SwiftUI
 
 struct LogoStatusView: View {
     let status: MonitorStatus
+    var provider: ProviderKind = .codex
 
     @State private var waitingPulse = false
     @State private var workingPulse = false
@@ -38,10 +39,16 @@ struct LogoStatusView: View {
     }
 
     private var logoMask: some View {
-        Image(nsImage: CodexLogoLoader.load())
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
+        Group {
+            if let image = ProviderLogoLoader.load(for: provider) {
+                Image(nsImage: image)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+            } else {
+                ProviderFallbackLogo(provider: provider)
+            }
+        }
     }
 
     private var workingGradient: some View {
@@ -86,24 +93,44 @@ struct LogoStatusView: View {
     }
 }
 
-enum CodexLogoLoader {
-    static func load() -> NSImage {
-        let installedLogoPath = "/Applications/Codex.app/Contents/Resources/codexTemplate@2x.png"
-        if let image = NSImage(contentsOfFile: installedLogoPath) {
-            return image
+private struct ProviderFallbackLogo: View {
+    let provider: ProviderKind
+
+    var body: some View {
+        Text(String(provider.displayName.prefix(1)))
+            .font(.system(size: 16, weight: .bold, design: .rounded))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private enum ProviderLogoLoader {
+    static func load(for provider: ProviderKind) -> NSImage? {
+        guard let resourceURL = Bundle.module.url(forResource: provider.lobeIconResourceName, withExtension: "png"),
+              let image = NSImage(contentsOf: resourceURL) else {
+            return nil
         }
 
-        if let resourceURL = Bundle.module.url(forResource: "codexTemplate@2x", withExtension: "png"),
-           let image = NSImage(contentsOf: resourceURL) {
-            return image
-        }
+        image.isTemplate = true
+        return image
+    }
+}
 
-        return NSImage(size: NSSize(width: 22, height: 22), flipped: false) { rect in
-            NSColor.white.setFill()
-            let path = NSBezierPath(roundedRect: rect.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6)
-            path.fill()
-            return true
+private extension ProviderKind {
+    var lobeIconResourceName: String {
+        switch self {
+        case .codex:
+            return "lobe-codex"
+        case .claude:
+            return "lobe-claude"
         }
+    }
+}
+
+extension LogoStatusView {
+    func provider(_ provider: ProviderKind) -> LogoStatusView {
+        var copy = self
+        copy.provider = provider
+        return copy
     }
 }
 

@@ -6,6 +6,7 @@ struct CapsuleView: View {
     var body: some View {
         HStack(spacing: 10) {
             LogoStatusView(status: model.snapshot.status)
+                .provider(model.provider)
                 .frame(width: 22, height: 22)
 
             if model.isExpanded {

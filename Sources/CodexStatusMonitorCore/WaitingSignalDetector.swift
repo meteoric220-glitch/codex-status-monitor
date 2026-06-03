@@ -1,36 +1,36 @@
 import Foundation
 
 public struct WaitingSignalDetector: Sendable {
-    private let mediumSignals = [
+    private let requestSignals = [
         "waiting for",
         "please provide",
         "please confirm",
         "please choose",
-        "choose",
-        "select",
-        "confirm",
-        "approve",
-        "proceed",
-        "continue",
-        "allow",
-        "which",
+        "please select",
+        "please approve",
+        "please proceed",
+        "please continue",
+        "please allow",
         "do you want",
         "would you like",
         "let me know",
-        "tell me",
+        "tell me what",
+        "tell me which",
+        "tell me how",
         "请提供",
         "请确认",
         "请选择",
-        "选择",
-        "确认",
-        "批准",
-        "继续",
-        "允许",
-        "要不要",
-        "是否",
-        "哪一个",
-        "哪种",
-        "告诉我"
+        "请批准",
+        "请继续",
+        "请允许",
+        "需要你提供",
+        "需要你确认",
+        "需要你选择",
+        "要不要继续",
+        "是否继续",
+        "告诉我你的选择",
+        "告诉我你选择",
+        "告诉我哪"
     ]
 
     private let optionSignals = [
@@ -54,7 +54,7 @@ public struct WaitingSignalDetector: Sendable {
             return false
         }
 
-        if containsAny(mediumSignals, in: normalized) {
+        if containsAny(requestSignals, in: normalized) {
             return true
         }
 
@@ -71,7 +71,7 @@ public struct WaitingSignalDetector: Sendable {
             return false
         }
 
-        if containsAny(mediumSignals, in: lastQuestion) {
+        if containsAny(requestSignals, in: lastQuestion) {
             return true
         }
 
