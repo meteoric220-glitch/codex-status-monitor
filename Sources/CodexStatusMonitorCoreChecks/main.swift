@@ -71,6 +71,60 @@ struct CheckRunner {
         expect(
             classifier.classify(events: [
                 .taskStarted(turnID: "turn", timestamp: baseDate),
+                .taskComplete(turnID: "turn", timestamp: baseDate.addingTimeInterval(1)),
+                .assistantMessage(
+                    text: """
+                    <proposed_plan>
+                    # Demo
+                    </proposed_plan>
+                    """,
+                    phase: "final_answer",
+                    timestamp: baseDate.addingTimeInterval(2)
+                )
+            ]) == .waiting,
+            "Final proposed plan should be waiting"
+        )
+
+        expect(
+            classifier.classify(events: [
+                .taskStarted(turnID: "turn", timestamp: baseDate),
+                .taskComplete(turnID: "turn", timestamp: baseDate.addingTimeInterval(1)),
+                .assistantMessage(
+                    text: "`<proposed_plan>...</proposed_plan>` 出现在最新最终回复时，现在会判为 Waiting。",
+                    phase: "final_answer",
+                    timestamp: baseDate.addingTimeInterval(2)
+                )
+            ]) == .done,
+            "Inline proposed plan explanation should be done"
+        )
+
+        expect(
+            classifier.classify(events: [
+                .taskStarted(turnID: "old", timestamp: baseDate),
+                .taskComplete(turnID: "old", timestamp: baseDate.addingTimeInterval(1)),
+                .assistantMessage(
+                    text: """
+                    <proposed_plan>
+                    # Old Demo
+                    </proposed_plan>
+                    """,
+                    phase: "final_answer",
+                    timestamp: baseDate.addingTimeInterval(2)
+                ),
+                .taskStarted(turnID: "new", timestamp: baseDate.addingTimeInterval(10)),
+                .taskComplete(turnID: "new", timestamp: baseDate.addingTimeInterval(11)),
+                .assistantMessage(
+                    text: "已完成，可以运行。",
+                    phase: "final_answer",
+                    timestamp: baseDate.addingTimeInterval(12)
+                )
+            ]) == .done,
+            "Historical proposed plan should not affect the latest completed turn"
+        )
+
+        expect(
+            classifier.classify(events: [
+                .taskStarted(turnID: "turn", timestamp: baseDate),
                 .functionCall(name: "request_user_input", callID: "call-1", arguments: "{}", timestamp: baseDate.addingTimeInterval(1)),
                 .functionCallOutput(callID: "call-1", timestamp: baseDate.addingTimeInterval(2)),
                 .taskComplete(turnID: "turn", timestamp: baseDate.addingTimeInterval(3))

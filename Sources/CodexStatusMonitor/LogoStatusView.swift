@@ -6,9 +6,7 @@ struct LogoStatusView: View {
     let status: MonitorStatus
     var provider: ProviderKind = .codex
 
-    @State private var waitingPulse = false
-    @State private var workingPulse = false
-    @State private var gradientShift = false
+    @State private var doneSettle = false
 
     var body: some View {
         if provider == .claude {
@@ -30,19 +28,25 @@ struct LogoStatusView: View {
         Group {
             switch status {
             case .working:
-                logoMask
-                    .overlay(workingGradient.mask(logoMask))
-                    .scaleEffect(workingPulse ? 1.04 : 0.96)
-                    .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: workingPulse)
-                    .animation(.linear(duration: 1.8).repeatForever(autoreverses: true), value: gradientShift)
+                TimelineView(.animation) { context in
+                    logoMask
+                        .overlay(workingGradient(at: context.date).mask(logoMask))
+                }
             case .waiting:
+                TimelineView(.animation) { context in
+                    logoMask
+                        .foregroundStyle(statusColor)
+                        .opacity(waitingOpacity(at: context.date))
+                }
+            case .done:
                 logoMask
                     .foregroundStyle(statusColor)
-                    .opacity(waitingPulse ? 1.0 : 0.25)
-                    .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: waitingPulse)
-            default:
+                    .scaleEffect(doneSettle ? 1.06 : 1)
+                    .animation(.spring(response: 0.24, dampingFraction: 0.72), value: doneSettle)
+            case .setup, .error:
                 logoMask
                     .foregroundStyle(statusColor)
+                    .opacity(status == .setup ? 0.65 : 0.7)
             }
         }
     }
@@ -60,16 +64,47 @@ struct LogoStatusView: View {
         }
     }
 
-    private var workingGradient: some View {
-        LinearGradient(
+    private func workingGradient(at date: Date) -> some View {
+        let period = 2.4
+        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+        let sweep = 0.5 - 0.5 * cos(phase * 2 * .pi)
+        let offset = -0.65 + sweep * 1.3
+
+        return LinearGradient(
             colors: [
                 Color(hex: 0x004993),
+                Color(hex: 0x2D7DD2),
                 Color(hex: 0x6CB5FF),
+                Color(hex: 0x2D7DD2),
                 Color(hex: 0x004993)
             ],
-            startPoint: gradientShift ? .trailing : .leading,
-            endPoint: gradientShift ? .leading : .trailing
+            startPoint: UnitPoint(x: offset, y: -0.2),
+            endPoint: UnitPoint(x: offset + 1.0, y: 1.2)
         )
+    }
+
+    private func waitingOpacity(at date: Date) -> Double {
+        let cycleDuration = 1.45
+        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycleDuration)
+
+        switch phase {
+        case 0..<0.14:
+            return interpolate(from: 0.35, to: 1.0, progress: phase / 0.14)
+        case 0.14..<0.32:
+            return interpolate(from: 1.0, to: 0.55, progress: (phase - 0.14) / 0.18)
+        case 0.32..<0.48:
+            return interpolate(from: 0.55, to: 1.0, progress: (phase - 0.32) / 0.16)
+        case 0.48..<0.68:
+            return interpolate(from: 1.0, to: 0.65, progress: (phase - 0.48) / 0.2)
+        default:
+            return 0.65
+        }
+    }
+
+    private func interpolate(from start: Double, to end: Double, progress: Double) -> Double {
+        let clampedProgress = min(max(progress, 0), 1)
+        let eased = 0.5 - 0.5 * cos(clampedProgress * .pi)
+        return start + (end - start) * eased
     }
 
     private var statusColor: Color {
@@ -86,17 +121,14 @@ struct LogoStatusView: View {
     }
 
     private func restartAnimation() {
-        waitingPulse = false
-        workingPulse = false
-        gradientShift = false
+        doneSettle = false
 
         DispatchQueue.main.async {
-            if status == .waiting {
-                waitingPulse = true
-            }
-            if status == .working {
-                workingPulse = true
-                gradientShift = true
+            if status == .done {
+                doneSettle = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+                    doneSettle = false
+                }
             }
         }
     }
@@ -172,25 +204,60 @@ private struct ClaudeNativeLogoView: View {
     }
 }
 
+@MainActor
 private enum ProviderLogoLoader {
-    static func load(for provider: ProviderKind) -> NSImage? {
-        guard let resourceURL = Bundle.module.url(forResource: provider.lobeIconResourceName, withExtension: "png"),
-              let image = NSImage(contentsOf: resourceURL) else {
-            return nil
-        }
+    private static var codexTemplateImage: NSImage?
+    private static var claudeTemplateImage: NSImage?
+    private static var codexNativeImage: NSImage?
+    private static var claudeNativeImage: NSImage?
 
-        image.isTemplate = true
-        return image
+    static func load(for provider: ProviderKind) -> NSImage? {
+        loadCached(provider: provider, isTemplate: true)
     }
 
     static func loadNative(for provider: ProviderKind) -> NSImage? {
+        loadCached(provider: provider, isTemplate: false)
+    }
+
+    private static func loadCached(provider: ProviderKind, isTemplate: Bool) -> NSImage? {
+        if let image = cachedImage(for: provider, isTemplate: isTemplate) {
+            return image
+        }
+
         guard let resourceURL = Bundle.module.url(forResource: provider.lobeIconResourceName, withExtension: "png"),
               let image = NSImage(contentsOf: resourceURL) else {
             return nil
         }
 
-        image.isTemplate = false
+        image.isTemplate = isTemplate
+        setCachedImage(image, for: provider, isTemplate: isTemplate)
         return image
+    }
+
+    private static func cachedImage(for provider: ProviderKind, isTemplate: Bool) -> NSImage? {
+        switch (provider, isTemplate) {
+        case (.codex, true):
+            return codexTemplateImage
+        case (.claude, true):
+            return claudeTemplateImage
+        case (.codex, false):
+            return codexNativeImage
+        case (.claude, false):
+            return claudeNativeImage
+        }
+    }
+
+    private static func setCachedImage(_ image: NSImage, for provider: ProviderKind, isTemplate: Bool) {
+        switch (provider, isTemplate) {
+        case (.codex, true):
+            codexTemplateImage = image
+        case (.claude, true):
+            claudeTemplateImage = image
+        case (.codex, false):
+            codexNativeImage = image
+        case (.claude, false):
+            claudeNativeImage = image
+        }
     }
 }
 

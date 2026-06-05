@@ -22,9 +22,14 @@ public final class StateClassifier {
             return .working
         }
 
-        if let lastAssistantText = lastCompletedAssistantMessage(events),
-           waitingDetector.requiresUserResponse(lastAssistantText) {
-            return .waiting
+        if let lastAssistantText = lastCompletedAssistantMessage(events) {
+            if containsProposedPlan(lastAssistantText) {
+                return .waiting
+            }
+
+            if waitingDetector.requiresUserResponse(lastAssistantText) {
+                return .waiting
+            }
         }
 
         return .done
@@ -135,5 +140,20 @@ public final class StateClassifier {
             }
             return nil
         }.first
+    }
+
+    private func containsProposedPlan(_ text: String) -> Bool {
+        let lines = text
+            .lowercased()
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        guard let startIndex = lines.firstIndex(of: "<proposed_plan>"),
+              let endIndex = lines[startIndex...].firstIndex(of: "</proposed_plan>")
+        else {
+            return false
+        }
+
+        return startIndex < endIndex
     }
 }
