@@ -11,6 +11,22 @@ struct LogoStatusView: View {
     @State private var gradientShift = false
 
     var body: some View {
+        if provider == .claude {
+            ClaudeNativeLogoView(status: status)
+                .accessibilityLabel(status.displayText)
+        } else {
+            codexLogo
+                .onAppear {
+                    restartAnimation()
+                }
+                .onChange(of: status) {
+                    restartAnimation()
+                }
+                .accessibilityLabel(status.displayText)
+        }
+    }
+
+    private var codexLogo: some View {
         Group {
             switch status {
             case .working:
@@ -29,13 +45,6 @@ struct LogoStatusView: View {
                     .foregroundStyle(statusColor)
             }
         }
-        .onAppear {
-            restartAnimation()
-        }
-        .onChange(of: status) {
-            restartAnimation()
-        }
-        .accessibilityLabel(status.displayText)
     }
 
     private var logoMask: some View {
@@ -103,6 +112,66 @@ private struct ProviderFallbackLogo: View {
     }
 }
 
+private struct ClaudeNativeLogoView: View {
+    let status: MonitorStatus
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            nativeLogo
+                .rotationEffect(.degrees(rotationAngle(at: context.date)))
+                .saturation(status == .setup || status == .error ? 0 : 1)
+                .opacity(status == .setup || status == .error ? 0.7 : 1)
+        }
+    }
+
+    private var nativeLogo: some View {
+        Group {
+            if let image = ProviderLogoLoader.loadNative(for: .claude) {
+                Image(nsImage: image)
+                    .resizable()
+                    .renderingMode(.original)
+                    .scaledToFit()
+            } else {
+                ProviderFallbackLogo(provider: .claude)
+            }
+        }
+    }
+
+    private func rotationAngle(at date: Date) -> Double {
+        switch status {
+        case .working:
+            return date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8 * 360
+        case .waiting:
+            return waitingAngle(at: date)
+        case .done, .setup, .error:
+            return 0
+        }
+    }
+
+    private func waitingAngle(at date: Date) -> Double {
+        let halfSwingDuration = 0.35
+        let pauseDuration = 0.65
+        let activeDuration = halfSwingDuration * 4
+        let cycleDuration = activeDuration + pauseDuration
+        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycleDuration)
+
+        guard phase < activeDuration else {
+            return -15
+        }
+
+        let segment = Int(phase / halfSwingDuration)
+        let progress = (phase - Double(segment) * halfSwingDuration) / halfSwingDuration
+        let eased = 0.5 - 0.5 * cos(progress * .pi)
+
+        switch segment {
+        case 0, 2:
+            return -15 + eased * 30
+        default:
+            return 15 - eased * 30
+        }
+    }
+}
+
 private enum ProviderLogoLoader {
     static func load(for provider: ProviderKind) -> NSImage? {
         guard let resourceURL = Bundle.module.url(forResource: provider.lobeIconResourceName, withExtension: "png"),
@@ -113,6 +182,16 @@ private enum ProviderLogoLoader {
         image.isTemplate = true
         return image
     }
+
+    static func loadNative(for provider: ProviderKind) -> NSImage? {
+        guard let resourceURL = Bundle.module.url(forResource: provider.lobeIconResourceName, withExtension: "png"),
+              let image = NSImage(contentsOf: resourceURL) else {
+            return nil
+        }
+
+        image.isTemplate = false
+        return image
+    }
 }
 
 private extension ProviderKind {
@@ -121,7 +200,7 @@ private extension ProviderKind {
         case .codex:
             return "lobe-codex"
         case .claude:
-            return "lobe-claude"
+            return "lobe-claude-color"
         }
     }
 }

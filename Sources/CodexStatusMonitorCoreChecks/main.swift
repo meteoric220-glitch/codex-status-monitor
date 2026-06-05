@@ -201,6 +201,8 @@ struct CheckRunner {
         let toolResultLine = #"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"call_1","type":"tool_result","content":"ok","is_error":false}]},"uuid":"result-1","timestamp":"2026-06-02T14:23:42.000Z","entrypoint":"cli","cwd":"/tmp/claude-project","sessionId":"session-cli"}"#
         let doneLine = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"已完成，可以运行。"}],"stop_reason":"end_turn"},"uuid":"assistant-2","timestamp":"2026-06-02T14:23:43.000Z","entrypoint":"cli","cwd":"/tmp/claude-project","sessionId":"session-cli"}"#
         let waitingLine = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"请确认是否继续？"}],"stop_reason":"end_turn"},"uuid":"assistant-3","timestamp":"2026-06-02T14:23:44.000Z","entrypoint":"claude-vscode","cwd":"/tmp/claude-project","sessionId":"session-vscode"}"#
+        let exitPlanModeLine = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_plan","name":"ExitPlanMode","input":{"plan":"demo"}}],"stop_reason":"tool_use"},"uuid":"assistant-4","timestamp":"2026-06-02T14:23:45.000Z","entrypoint":"claude-vscode","cwd":"/tmp/claude-project","sessionId":"session-vscode"}"#
+        let askUserQuestionLine = #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_question","name":"AskUserQuestion","input":{"question":"Pick one"}}],"stop_reason":"tool_use"},"uuid":"assistant-5","timestamp":"2026-06-02T14:23:46.000Z","entrypoint":"claude-vscode","cwd":"/tmp/claude-project","sessionId":"session-vscode"}"#
 
         let workingEvents = [cliUserLine, toolUseLine].compactMap(parser.parseLine)
         expect(classifier.classify(events: workingEvents) == .working, "Claude unresolved tool_use should be working")
@@ -211,12 +213,28 @@ struct CheckRunner {
         let waitingEvents = [cliUserLine, waitingLine].compactMap(parser.parseLine)
         expect(classifier.classify(events: waitingEvents) == .waiting, "Claude final confirmation question should be waiting")
 
+        let exitPlanModeEvents = [cliUserLine, exitPlanModeLine].compactMap(parser.parseLine)
+        expect(classifier.classify(events: exitPlanModeEvents) == .waiting, "Claude ExitPlanMode should be waiting")
+
+        let askUserQuestionEvents = [cliUserLine, askUserQuestionLine].compactMap(parser.parseLine)
+        expect(classifier.classify(events: askUserQuestionEvents) == .waiting, "Claude AskUserQuestion should be waiting")
+
         expect(
             parser.parseLine(cliUserLine) == .taskStarted(
                 turnID: "prompt-1",
                 timestamp: Self.isoDate("2026-06-02T14:23:40.000Z")
             ),
             "Claude CLI user text should start a turn"
+        )
+
+        expect(
+            parser.parseLine(exitPlanModeLine) == .functionCall(
+                name: "request_user_input",
+                callID: "call_plan",
+                arguments: #"{"plan":"demo"}"#,
+                timestamp: Self.isoDate("2026-06-02T14:23:45.000Z")
+            ),
+            "Claude ExitPlanMode should map to request_user_input"
         )
     }
 

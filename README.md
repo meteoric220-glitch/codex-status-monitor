@@ -26,7 +26,7 @@ Provider icons are bundled from [Lobe Icons](https://github.com/lobehub/lobe-ico
 The bundled provider icons come from Lobe Icons:
 
 - Codex: [`packages/static-png/light/codex.png`](https://github.com/lobehub/lobe-icons/blob/master/packages/static-png/light/codex.png)
-- Claude: [`packages/static-png/light/claude.png`](https://github.com/lobehub/lobe-icons/blob/master/packages/static-png/light/claude.png)
+- Claude: [`light/claude-color.png`](https://unpkg.com/@lobehub/icons-static-png@latest/light/claude-color.png)
 - License: [`MIT`](https://github.com/lobehub/lobe-icons/blob/master/LICENSE), copied into the app bundle as `LobeIcons-LICENSE.txt`
 
 ## Requirements

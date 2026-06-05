@@ -17,7 +17,7 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$BUILD_DIR/release/CodexStatusMonitor" "$MACOS_DIR/Codex Status Monitor"
 cp -R "$BUILD_DIR/release/CodexStatusMonitor_CodexStatusMonitor.bundle" "$APP_DIR/CodexStatusMonitor_CodexStatusMonitor.bundle"
 cp "$ROOT_DIR/Sources/CodexStatusMonitor/Resources/lobe-codex.png" "$RESOURCES_DIR/lobe-codex.png"
-cp "$ROOT_DIR/Sources/CodexStatusMonitor/Resources/lobe-claude.png" "$RESOURCES_DIR/lobe-claude.png"
+cp "$ROOT_DIR/Sources/CodexStatusMonitor/Resources/lobe-claude-color.png" "$RESOURCES_DIR/lobe-claude-color.png"
 cp "$ROOT_DIR/Sources/CodexStatusMonitor/Resources/LobeIcons-LICENSE.txt" "$RESOURCES_DIR/LobeIcons-LICENSE.txt"
 
 cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'

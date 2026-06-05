@@ -121,7 +121,7 @@ public final class ClaudeSessionEventParser: SessionEventParsing {
 
         if let toolUse = firstToolUse(in: message.content) {
             return .functionCall(
-                name: toolUse.name ?? "",
+                name: normalizedToolName(toolUse.name),
                 callID: toolUse.id,
                 arguments: toolUse.input?.compactJSONString,
                 timestamp: timestamp
@@ -169,6 +169,19 @@ public final class ClaudeSessionEventParser: SessionEventParsing {
             return nil
         case let .array(items):
             return items.first { $0.type == "tool_use" }
+        }
+    }
+
+    private func normalizedToolName(_ name: String?) -> String {
+        guard let name else {
+            return ""
+        }
+
+        switch name {
+        case "ExitPlanMode", "AskUserQuestion":
+            return "request_user_input"
+        default:
+            return name
         }
     }
 
